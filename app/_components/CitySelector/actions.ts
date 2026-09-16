@@ -3,6 +3,7 @@
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { saveCity } from '@/app/_lib/citiesStore';
+import { cityToSlug } from '@/app/_config/cities';
 
 /**
  * Server Action: Save a city to recent searches and navigate to its weather page
@@ -23,7 +24,8 @@ export async function saveRecentCity(
 
     // Side effects (Next.js specific)
     revalidatePath('/');
-    redirect(`/weather/${encodeURIComponent(normalizedCity.toLowerCase())}`);
+    const slug = cityToSlug(normalizedCity);
+    redirect(`/weather/${encodeURIComponent(slug)}`);
 
     return {};
   } catch (error) {

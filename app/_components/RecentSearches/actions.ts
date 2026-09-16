@@ -3,6 +3,7 @@
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { getRecentCities as getRecentCitiesFromStore, saveCity } from '@/app/_lib/citiesStore';
+import { cityToSlug } from '@/app/_config/cities';
 import type { RecentCity } from '@/types/weather';
 
 /**
@@ -30,5 +31,6 @@ export async function saveRecentCityFromFormData(formData: FormData): Promise<vo
 
   // Side effects (Next.js specific)
   revalidatePath('/');
-  redirect(`/weather/${encodeURIComponent(normalizedCity.toLowerCase())}`);
+  const slug = cityToSlug(normalizedCity);
+  redirect(`/weather/${encodeURIComponent(slug)}`);
 }

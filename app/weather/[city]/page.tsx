@@ -1,17 +1,24 @@
-import { notFound } from 'next/navigation';
+import { notFound, redirect } from 'next/navigation';
 import { getWeather } from '@/app/weather/_services/weatherService';
+import { POPULAR_CITIES, slugToCity, cityToSlug, capitalizeCity } from '@/app/_config/cities';
+
+// Pre-render popular cities at build time (SSG)
+export async function generateStaticParams() {
+  return POPULAR_CITIES.map((city) => ({ city }));
+}
 
 export async function generateMetadata({
   params,
 }: {
   params: Promise<{ city: string }>;
 }) {
-  const { city } = await params;
-  const cityCapitalized = city.charAt(0).toUpperCase() + city.slice(1);
+  const { city: slug } = await params;
+  const cityName = slugToCity(slug);
+  const cityDisplay = capitalizeCity(cityName);
 
   return {
-    title: `Weather in ${cityCapitalized}`,
-    description: `Current weather conditions in ${cityCapitalized}`,
+    title: `Weather in ${cityDisplay}`,
+    description: `Current weather conditions in ${cityDisplay}`,
   };
 }
 
@@ -20,14 +27,23 @@ export default async function WeatherPage({
 }: {
   params: Promise<{ city: string }>;
 }) {
-  const { city } = await params;
-  const cityCapitalized = city.charAt(0).toUpperCase() + city.slice(1);
+  const { city: rawSlug } = await params;
+
+  // Normalize: convert to slug format (lowercase, kebab-case)
+  const normalizedSlug = cityToSlug(rawSlug);
+  if (rawSlug !== normalizedSlug) {
+    redirect(`/weather/${encodeURIComponent(normalizedSlug)}`);
+  }
+
+  // Convert slug to city name for API and display
+  const cityName = slugToCity(normalizedSlug);
+  const cityDisplay = capitalizeCity(cityName);
 
   // Fetch weather data using shared service
   // - Throws Error for 5xx (triggers app/error.tsx)
   // - Returns null for 4xx (city not found)
   // - Special case: city='error500' simulates server error
-  const weather = await getWeather(city);
+  const weather = await getWeather(cityName);
 
   if (!weather) {
     notFound();
@@ -39,7 +55,7 @@ export default async function WeatherPage({
     <div className="min-h-screen flex items-center justify-center bg-background">
       <div className="text-center p-8 space-y-8">
         <h1 className="text-4xl font-bold text-foreground">
-          Weather in {cityCapitalized}
+          Weather in {cityDisplay}
         </h1>
         <div className="bg-white dark:bg-zinc-900 rounded-lg shadow-lg p-8 min-w-[300px]">
           <div className="text-center">

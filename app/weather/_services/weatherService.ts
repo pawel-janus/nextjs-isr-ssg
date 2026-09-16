@@ -43,12 +43,16 @@ export async function getWeather(city: string): Promise<WeatherResponse | null> 
   // }
 
   try {
+    console.log(`[weatherService] Fetching weather for: ${city} at ${new Date().toISOString()}`);
+
     const res = await fetch(
       `https://wttr.in/${encodeURIComponent(city)}?format=j1`,
       {
-        cache: 'no-store', // Always fetch fresh data (SSR)
+        next: { revalidate: 3600 }, // ISR: cache for 1 hour, then rebuild on next request
       }
     );
+
+    console.log(`[weatherService] Response received for: ${city} - Status: ${res.status}`);
 
     // Get response as text first (wttr.in returns plain text for invalid cities)
     const text = await res.text();

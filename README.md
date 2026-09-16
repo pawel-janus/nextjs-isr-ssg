@@ -1,17 +1,17 @@
-# Server Actions + Forms - Next.js POC
+# ISR/SSG + Caching - Next.js POC
 
-Weather application demonstrating **Server Actions**, **React 19 form hooks** (`useActionState`, `useFormStatus`), **progressive enhancement**, and **type-safe server mutations** with Next.js 16 App Router.
+Weather application demonstrating **Incremental Static Regeneration (ISR)**, **Static Site Generation (SSG)**, **time-based revalidation**, and **cache strategies** with Next.js 16 App Router.
 
 ## Overview
 
-This POC explores Next.js Server Actions by replacing traditional API Routes with direct server-side functions. The application demonstrates modern form handling with React 19 hooks, progressive enhancement (works without JavaScript), and seamless integration between client and server.
+This POC explores Next.js static generation strategies by pre-rendering popular cities at build time and implementing time-based cache revalidation. The application demonstrates the difference between SSR (on-demand), SSG (build-time), and ISR (static + revalidation), along with SEO-friendly URL slugs.
 
-**Key concepts:** Server Actions (`'use server'`), `useActionState`, `useFormStatus`, `revalidatePath`, FormData handling, progressive enhancement, and type-safe server mutations.
+**Key concepts:** `generateStaticParams`, `revalidate`, SSG vs ISR vs SSR, cache strategies, kebab-case URL slugs, Cloud Run limitations.
 
 ## Tech Stack
 
 - **Next.js 16.3.4** - React framework with App Router
-- **React 19.2.8** - Server Components & new form hooks
+- **React 19.2.8** - Server Components & form hooks
 - **TypeScript** - Type safety across frontend and backend
 - **Zod** - Runtime schema validation
 - **Tailwind CSS v4** - Styling with CSS-based config
@@ -19,34 +19,27 @@ This POC explores Next.js Server Actions by replacing traditional API Routes wit
 
 ## Key Features
 
-### Server Actions
-- `'use server'` directive - mark functions as server-side only
-- Direct function calls from Client Components (no fetch/HTTP)
-- Automatic serialization of FormData
-- Type-safe with full TypeScript support
-- No API Route boilerplate needed
+### Static Site Generation (SSG)
+- `generateStaticParams` - pre-render popular cities at build time
+- Static HTML files in Docker image
+- Instant page load (no API call on request)
+- SEO-optimized (crawlers see full HTML)
 
-### React 19 Form Hooks
-- **useActionState** - form state management + pending state
-- **useFormStatus** - access form submission status in child components
-- Replaces old patterns: `useState` + `useEffect` + `fetch()`
+### Incremental Static Regeneration (ISR)
+- `revalidate: 3600` - rebuild cached pages after 1 hour
+- Stale-while-revalidate pattern (show old, rebuild in background)
+- Per-page revalidation (only rebuild what's needed)
+- **Note:** Limited on Cloud Run (ephemeral filesystem)
 
-### Progressive Enhancement
-- Forms work without JavaScript enabled
-- Server Actions execute even if JS fails to load
-- Graceful degradation built-in
-- Better accessibility and reliability
+### Cache Strategies
+- **force-cache** - cache forever (pure SSG)
+- **no-store** - no cache (pure SSR)
+- **revalidate: N** - cache for N seconds, then rebuild (ISR)
 
-### Cache Revalidation
-- `revalidatePath()` - invalidate cache after mutations
-- Automatic re-rendering of affected routes
-- No manual `router.refresh()` needed
-
-### Form Data Handling
-- Native FormData API
-- Server-side validation with Zod
-- Type-safe inputs/outputs
-- Error handling built into useActionState
+### SEO-Friendly URLs
+- Kebab-case slugs: `/weather/new-york` (not `/weather/newyork`)
+- Automatic normalization: `/weather/New York` → redirect → `/weather/new-york`
+- Proper capitalization: "New York" (not "New york")
 
 ## Project Structure
 
@@ -56,6 +49,8 @@ app/
   page.tsx                      # Homepage (landing page with form)
   error.tsx                     # Global error boundary
   globals.css                   # Tailwind + theme config
+  _config/
+    cities.ts                   # Popular cities config + slug helpers
   _lib/
     citiesStore.ts              # Pure business logic (no framework dependencies)
   _components/
@@ -67,22 +62,23 @@ app/
       actions.ts                # Server Actions for RecentSearches
   weather/                      # Weather feature module
     _services/                  # Server-side services
-      weatherService.ts         # Shared data fetching with Zod validation
+      weatherService.ts         # Shared data fetching with Zod validation + revalidate
     [city]/                     # Dynamic route segment
-      page.tsx                  # Weather page (Server Component)
+      page.tsx                  # Weather page (Server Component) + generateStaticParams
       loading.tsx               # Loading UI (automatic)
       not-found.tsx             # 404 page for invalid cities
 types/
   weather.ts                    # Shared Zod schemas + TypeScript types
 ```
 
-**Key changes from POC #3:**
-- ✅ **Added:** Server Actions (collocated with components)
-- ✅ **Added:** `_lib/citiesStore.ts` - Pure business logic layer
-- ❌ **Removed:** `app/api/cities/recent/route.ts` - API Route (no longer needed)
-- 🔄 **Updated:** `CitySelector` - now uses `useActionState` + `useFormStatus`
-- 🔄 **Updated:** `RecentSearches` - now Server Component with Server Actions
-- 📁 **Architecture:** Layered structure (store → actions → components)
+**Key changes from POC #4:**
+- ✅ **Added:** `app/_config/cities.ts` - Popular cities configuration
+- ✅ **Added:** `generateStaticParams()` - Pre-render popular cities
+- ✅ **Added:** `revalidate: 3600` in fetch() - ISR with 1h cache
+- ✅ **Added:** Kebab-case URL slugs (`new-york`, not `newyork`)
+- ✅ **Added:** Slug normalization helpers (`slugToCity`, `cityToSlug`)
+- 🔄 **Updated:** `weatherService.ts` - changed from `cache: 'no-store'` to `revalidate: 3600`
+- 🔄 **Updated:** `page.tsx` - added URL normalization (redirect to canonical slug)
 
 ## Getting Started
 
@@ -96,8 +92,11 @@ types/
 # Install dependencies
 npm install
 
-# Run dev server
-npm run dev
+# Build for production (see SSG in action)
+npm run build
+
+# Run production server
+node .next/standalone/server.js
 ```
 
 Open [http://localhost:3000](http://localhost:3000)
@@ -105,364 +104,215 @@ Open [http://localhost:3000](http://localhost:3000)
 ### Usage
 
 1. **Homepage:** Landing page with city search form
-2. **Search city:** Type city name (e.g., "London") → Submit
-3. **Server Action:** Form data sent to server (no API call!)
-4. **Dynamic route:** Redirects to `/weather/london`
-5. **Loading state:** Automatic pending state via `useFormStatus`
-6. **Weather display:** Current weather with temperature, conditions, wind
-7. **Recent searches:** Click any recent city (each is a form with Server Action)
-
-### Test Progressive Enhancement
-
-**Disable JavaScript in browser:**
-```
-Chrome DevTools → Cmd+Shift+P → "Disable JavaScript"
-```
-
-Submit the form → **it still works!** Server Action executes server-side.
+2. **Search city:** Type city name (e.g., "New York") → Submit
+3. **Popular cities:** Pre-rendered (instant load) - Warsaw, London, New York, Tokyo, Paris
+4. **Other cities:** SSR on-demand (fetch from API, then cache for 1h)
+5. **Recent searches:** Click any recent city (Server Action redirect)
 
 ## How It Works
 
-### Server Actions - Layered Architecture
+### Static Site Generation (SSG)
 
-**Layer 1: Pure Business Logic (Store)**
-```tsx
-// app/_lib/citiesStore.ts
-import { z } from 'zod';
-
-export function saveCity(city: string): string {
-  // Validation with Zod (with security regex)
-  const result = schema.safeParse({ city: city.trim() });
-  if (!result.success) {
-    throw new Error('Invalid city name');
-  }
-  
-  // Save to storage (in-memory Map)
-  recentCities.set(result.data.city.toLowerCase(), { ... });
-  
-  return result.data.city;
-}
-```
-
-**Layer 2: Server Actions (Framework Integration)**
-```tsx
-// app/_components/CitySelector/actions.ts
-'use server';
-
-import { redirect } from 'next/navigation';
-import { revalidatePath } from 'next/cache';
-import { saveCity } from '@/app/_lib/citiesStore';
-
-export async function saveRecentCity(
-  prevState: { error?: string } | null,
-  formData: FormData
-): Promise<{ error?: string }> {
-  try {
-    // Pure business logic
-    const normalizedCity = saveCity(formData.get('city'));
-    
-    // Framework side effects
-    revalidatePath('/');
-    redirect(`/weather/${normalizedCity.toLowerCase()}`);
-    
-    return {};
-  } catch (error) {
-    // NEXT_REDIRECT must be re-thrown!
-    if (error instanceof Error && error.message === 'NEXT_REDIRECT') {
-      throw error;
-    }
-    return { error: 'Please enter a valid city name' };
-  }
-}
-```
-
-**Key points:**
-- `'use server'` at top of file = all exports are Server Actions
-- **Separation:** Pure logic (store) vs Framework logic (actions)
-- **redirect()** throws NEXT_REDIRECT - must re-throw in try/catch!
-- Returns serializable data only
-
-### Client Component with useActionState
-
-```tsx
-// app/_components/CitySelector/CitySelector.tsx
-'use client';
-
-import { useActionState } from 'react';
-import { saveRecentCity } from './actions';  // ← Collocated!
-
-export function CitySelector() {
-  const [state, formAction] = useActionState(saveRecentCity, null);
-  
-  return (
-    <form action={formAction}>
-      <input type="text" name="city" required />
-      <SubmitButton />
-      {state?.error && <p>{state.error}</p>}
-    </form>
-  );
-}
-```
-
-**useActionState hook:**
-- `saveRecentCity` - Server Action to execute
-- `null` - initial state
-- Returns: `[state, formAction]`
-  - `state` - return value from Server Action
-  - `formAction` - wrapped action to pass to `<form action={...}>`
-
-### Submit Button with useFormStatus
-
-```tsx
-// app/_components/CitySelector.tsx
-import { useFormStatus } from 'react-dom';
-
-function SubmitButton() {
-  const { pending } = useFormStatus();
-  
-  return (
-    <button type="submit" disabled={pending}>
-      {pending ? 'Loading...' : 'Search'}
-    </button>
-  );
-}
-```
-
-**useFormStatus hook:**
-- **Must be in a child component** (not the form itself)
-- Provides: `{ pending, data, method, action }`
-- `pending` - true while form is submitting
-- Automatically updates when Server Action starts/finishes
-
-### Server Component with Server Action
-
-```tsx
-// app/_components/RecentSearches/RecentSearches.tsx
-import { getRecentCities, saveRecentCityFromFormData } from './actions';
-
-export async function RecentSearches() {
-  const cities = await getRecentCities();
-  
-  // Direct function assignment (no inline action needed)
-  const handleCityClick = saveRecentCityFromFormData;
-  
-  return (
-    <div>
-      {cities.map((city) => (
-        <form action={handleCityClick}>
-          <input type="hidden" name="city" value={city.name} />
-          <button type="submit">{city.name}</button>
-        </form>
-      ))}
-    </div>
-  );
-}
-```
-
-**Server Actions collocated:**
-```tsx
-// app/_components/RecentSearches/actions.ts
-'use server';
-
-export async function getRecentCities(): Promise<RecentCity[]> {
-  return getRecentCitiesFromStore();
-}
-
-export async function saveRecentCityFromFormData(formData: FormData) {
-  const city = formData.get('city') as string;
-  const normalizedCity = saveCity(city);
-  revalidatePath('/');
-  redirect(`/weather/${normalizedCity.toLowerCase()}`);
-}
-```
-
-**Pattern:**
-- Actions collocated with components (same folder)
-- Exported functions, not inline
-- Easier to test and reuse
-
-### Cache Revalidation
-
-```tsx
-// app/_components/CitySelector/actions.ts
-'use server';
-
-import { revalidatePath } from 'next/cache';
-
-export async function saveRecentCity(...) {
-  // Pure business logic (store layer)
-  const normalizedCity = saveCity(city);
-  
-  // Invalidate Router Cache for homepage (back button shows updated list)
-  revalidatePath('/');
-  
-  // Redirect
-  redirect(`/weather/${normalizedCity.toLowerCase()}`);
-}
-```
-
-**revalidatePath:**
-- Invalidates Router Cache (client-side) for a specific route
-- Homepage shows updated recent searches after back button
-- All components on that path re-render with fresh data
-- No manual `router.refresh()` needed
-
-### Security: Runtime Validation with Zod
-
-**TypeScript ≠ Runtime Security!**
+**Pre-render popular cities at build time:**
 
 ```typescript
-// types/weather.ts
-export const addCityRequestSchema = z.object({
-  city: z
-    .string()
-    .trim()                                    // Sanitization
-    .min(1, 'City name is required')
-    .max(50, 'City name is too long')
-    .regex(
-      /^[a-zA-ZÀ-ſ\s.\-']+$/,                 // Security filter
-      'City name can only contain letters, spaces, dots, hyphens, and apostrophes'
-    ),
+// app/_config/cities.ts
+export const POPULAR_CITIES = [
+  'warsaw',
+  'london',
+  'new-york',    // ← kebab-case for SEO
+  'tokyo',
+  'paris',
+] as const;
+```
+
+```typescript
+// app/weather/[city]/page.tsx
+import { POPULAR_CITIES } from '@/app/_config/cities';
+
+export async function generateStaticParams() {
+  return POPULAR_CITIES.map((city) => ({ city }));
+}
+```
+
+**Build output:**
+```
+● (SSG) prerendered as static HTML (uses generateStaticParams)
+  ├ ● /weather/warsaw
+  ├ ● /weather/london
+  ├ ● /weather/new-york
+  ├ ● /weather/tokyo
+  └ ● /weather/paris
+```
+
+**Physical files:**
+```
+.next/server/app/weather/
+  warsaw.html       ← Pre-rendered HTML (instant load)
+  london.html
+  new-york.html
+  tokyo.html
+  paris.html
+  [city]/           ← Dynamic route handler (for non-popular cities)
+```
+
+### Incremental Static Regeneration (ISR)
+
+**Time-based revalidation:**
+
+```typescript
+// app/weather/_services/weatherService.ts
+const res = await fetch(`https://wttr.in/${city}?format=j1`, {
+  next: { revalidate: 3600 },  // Cache for 1 hour, then rebuild
 });
 ```
 
-**What this blocks:**
-- ✅ XSS attacks: `<script>alert('XSS')</script>` → BLOCKED
-- ✅ SQL injection: `'; DROP TABLE cities; --` → BLOCKED  
-- ✅ Command injection: `London; rm -rf /` → BLOCKED
-- ✅ DoS: 10MB string → BLOCKED (max 50 chars)
-- ✅ Empty input: `"   "` → BLOCKED (trim + min 1)
+**How it works (theory):**
+1. Build time (10:00): Pre-render Warsaw with weather data
+2. User A (10:30): Cache HIT → instant load (data from 10:00)
+3. User B (11:01): Cache EXPIRED → show old data, rebuild in background
+4. User C (11:02): Cache HIT → show fresh data (from rebuild at 11:01)
 
-**Defense in Depth:**
-1. **Zod validation** (server-side) - CRITICAL for security
-2. **React auto-escape** (rendering) - XSS protection in JSX
-3. **CSP headers** (optional) - Additional layer
+**Stale-while-revalidate pattern:**
+- User never waits for fresh data (always instant)
+- Rebuild happens in background
+- Next user gets fresh data
 
-**Rule:** Always validate user input server-side with Zod, even if TypeScript types look safe!
+### Cloud Run Limitations
 
-## What I Learned
+⚠️ **ISR has limitations on Cloud Run:**
 
-### Server Actions vs API Routes
+| Issue | Problem | Impact |
+|-------|---------|--------|
+| **Scale-to-zero** | Container stops → cache lost | Cold start = empty cache |
+| **Ephemeral FS** | `.next/cache/` is temporary | Cache doesn't persist |
+| **Multi-instance** | Each instance has own cache | Cache not shared between containers |
 
-| Feature | Server Actions | API Routes |
-|---------|---------------|------------|
-| **File location** | `app/actions.ts` or inline | `app/api/*/route.ts` |
-| **How to call** | `<form action={...}>` or direct call | `fetch('/api/endpoint')` |
-| **Type safety** | ✅ Full TypeScript support | ⚠️ Manual typing needed |
-| **Boilerplate** | Minimal (just function) | More (NextRequest, NextResponse) |
-| **Progressive enhancement** | ✅ Works without JS | ❌ Requires JS |
-| **Use case** | Forms, mutations | Third-party webhooks, REST API |
+**What works:**
+- ✅ `generateStaticParams` - pre-rendered pages in Docker image (persistent)
+- ✅ `revalidate` - within single instance lifetime (if container lives)
 
-**Rule:** Use Server Actions for forms and mutations. Use API Routes only when you need a public HTTP endpoint.
+**What doesn't work:**
+- ❌ `revalidate` - after cold start (cache lost)
+- ❌ `revalidate` - across multiple instances (not shared)
 
-### React 19 Form Hooks
+**Why we use it anyway:**
+- Pre-rendered popular cities = instant load (always works)
+- Revalidation = nice-to-have (works when container is warm)
+- Each instance caches independently = still reduces API calls at scale
 
-#### useActionState
-```tsx
-const [state, formAction, isPending] = useActionState(action, initialState);
-```
+**Production solution (if needed):**
+- Redis/Memorystore for shared distributed cache
+- Vercel (ISR works perfectly, distributed cache built-in)
+- `min-instances=1` to keep container warm (costs ~$10-20/month)
 
-- **Replaces:** `useState` + `useEffect` + `fetch()` pattern
-- **state:** Return value from Server Action
-- **formAction:** Wrapped action to pass to `<form action={...}>`
-- **isPending:** Boolean (true during submission)
+### SEO-Friendly URL Slugs
 
-#### useFormStatus
-```tsx
-const { pending, data, method, action } = useFormStatus();
-```
+**Problem:** `/weather/newyork` is hard to read
 
-- **Must be in child component** (inside `<form>`)
-- **pending:** Boolean (true during submission)
-- **data:** FormData being submitted
-- **method:** HTTP method ('GET', 'POST', etc.)
-- **action:** Server Action being executed
+**Solution:** Kebab-case slugs
 
-### Progressive Enhancement
+```typescript
+// app/_config/cities.ts
+export function slugToCity(slug: string): string {
+  return slug.replace(/-/g, ' ');  // 'new-york' → 'new york'
+}
 
-**Traditional approach (requires JS):**
-```tsx
-<form onSubmit={async (e) => {
-  e.preventDefault();
-  await fetch('/api/submit', { method: 'POST', body: ... });
-  router.push('/success');
-}}>
-```
+export function cityToSlug(city: string): string {
+  return city.toLowerCase().trim().replace(/\s+/g, '-');  // 'New York' → 'new-york'
+}
 
-**Server Actions approach (works without JS):**
-```tsx
-<form action={serverAction}>
-  {/* No JavaScript needed - form submits to server */}
-</form>
-```
-
-If JavaScript loads:
-- Form submits via Server Action (fast, no page reload)
-- `useFormStatus` shows pending state
-- Client-side navigation with `redirect()`
-
-If JavaScript fails:
-- Form submits as traditional POST
-- Server Action still executes
-- Browser follows redirect
-
-### FormData Handling
-
-```tsx
-export async function saveRecentCity(prevState, formData: FormData) {
-  const city = formData.get('city') as string;
-  const file = formData.get('file') as File;
-  
-  // Validate with Zod
-  const result = schema.safeParse({ city });
-  
-  if (!result.success) {
-    return { error: 'Invalid input' };
-  }
-  
-  // Process...
+export function capitalizeCity(city: string): string {
+  return city
+    .split(' ')
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');  // 'new york' → 'New York'
 }
 ```
 
-**FormData API:**
-- `formData.get('name')` - single value
-- `formData.getAll('name')` - all values (checkboxes, multi-select)
-- Works with files, text inputs, hidden fields
+**URL normalization:**
 
-### Error Handling
-
-```tsx
-export async function saveRecentCity(prevState, formData) {
-  try {
-    // Validate
-    const result = schema.safeParse({ ... });
-    if (!result.success) {
-      return { error: 'Validation failed' };  // Show in UI
-    }
-    
-    // Save to DB
-    await db.save(...);
-    
-    // Success - redirect
-    redirect('/success');
-  } catch (error) {
-    // Don't catch redirect errors!
-    if (error.message === 'NEXT_REDIRECT') {
-      throw error;
-    }
-    
-    return { error: 'Server error' };
+```typescript
+// app/weather/[city]/page.tsx
+export default async function WeatherPage({ params }) {
+  const { city: rawSlug } = await params;
+  
+  // Normalize: convert to slug format (lowercase, kebab-case)
+  const normalizedSlug = cityToSlug(rawSlug);
+  if (rawSlug !== normalizedSlug) {
+    redirect(`/weather/${encodeURIComponent(normalizedSlug)}`);
   }
+  
+  // Convert slug to city name for API and display
+  const cityName = slugToCity(normalizedSlug);  // 'new york'
+  const cityDisplay = capitalizeCity(cityName);  // 'New York'
+  
+  const weather = await getWeather(cityName);
+  
+  return <h1>Weather in {cityDisplay}</h1>;
 }
 ```
 
-**Important:** `redirect()` throws `NEXT_REDIRECT` error - re-throw it!
+**Examples:**
+```
+/weather/new-york      → OK (canonical)
+/weather/New%20York    → redirect → /weather/new-york
+/weather/NEW-YORK      → redirect → /weather/new-york
+/weather/london        → OK (canonical)
+/weather/London        → redirect → /weather/london
+```
+
+### Cache Strategies Comparison
+
+| Strategy | Config | Use case |
+|----------|--------|----------|
+| **SSG (force-cache)** | `cache: 'force-cache'` | Static content (blog posts, docs) |
+| **SSR (no-store)** | `cache: 'no-store'` | Real-time data (stock prices, live scores) |
+| **ISR (revalidate)** | `next: { revalidate: 3600 }` | Semi-static data (weather, news, product pages) |
+
+**This POC uses ISR:**
+- Popular cities: pre-rendered (SSG) + revalidate 1h (ISR)
+- Other cities: SSR on-demand, then cached 1h
 
 ## Build for Production
 
 ```bash
+# Build (see pre-rendered pages)
 npm run build
-npm start
+
+# Output shows:
+# ● (SSG) prerendered as static HTML
+#   ├ ● /weather/warsaw
+#   ├ ● /weather/london
+#   └ ● /weather/new-york
+
+# Run production server
+node .next/standalone/server.js
+```
+
+**Verify pre-rendering:**
+```bash
+# Check physical files
+ls -la .next/server/app/weather/
+
+# Output:
+# warsaw.html       ← Pre-rendered!
+# london.html
+# new-york.html
+# tokyo.html
+# paris.html
+```
+
+**Test locally:**
+```bash
+# Popular city (instant load, no API call in logs)
+curl http://localhost:3000/weather/warsaw
+
+# Non-popular city (API call in logs)
+curl http://localhost:3000/weather/krakow
+
+# Check logs:
+# [weatherService] Fetching weather for: krakow  ← SSR on-demand
 ```
 
 ## Docker Build
@@ -471,13 +321,13 @@ Multi-stage Dockerfile optimized for Cloud Run:
 
 ```bash
 # Build locally
-docker build -t nextjs-server-actions:latest .
+docker build -t nextjs-isr-ssg:latest .
 
 # Run locally
-docker run -p 3000:3000 nextjs-server-actions:latest
+docker run -p 3000:3000 nextjs-isr-ssg:latest
 ```
 
-**Note:** In-memory storage (recentCities Map) resets when container restarts - this is expected for POC.
+**Pre-rendered pages are in Docker image** (not lost on cold start!)
 
 ## Cloud Run Deployment
 
@@ -485,9 +335,9 @@ docker run -p 3000:3000 nextjs-server-actions:latest
 
 **GCP Setup (one-time for all Next.js POCs):**
 ```bash
-# Artifact Registry repository already exists
-# Service Account already exists
-# See POC #1 or #2 documentation for initial setup
+# Artifact Registry repository already exists: nextjs-apps
+# Service Account already exists: nextjs-apps-sa
+# See POC #1 documentation for initial setup
 ```
 
 ### Deploy to Cloud Run
@@ -496,7 +346,7 @@ docker run -p 3000:3000 nextjs-server-actions:latest
 # Set variables
 PROJECT_ID=native-dev-506112
 REGION=europe-central2
-SERVICE_NAME=nextjs-server-actions
+SERVICE_NAME=nextjs-isr-ssg
 
 # 1. Build Docker image with Cloud Build
 gcloud builds submit \
@@ -540,130 +390,171 @@ SERVICE_URL=$(gcloud run services describe ${SERVICE_NAME} \
   --region=${REGION} \
   --format='value(status.url)')
 
-# Test dynamic routes
+# Test pre-rendered city (instant)
 curl -s ${SERVICE_URL}/weather/warsaw | grep "°C"
 
-# Test progressive enhancement (form works without JS)
-curl -X POST ${SERVICE_URL}/ -d "city=London" -L
+# Test non-popular city (SSR on-demand)
+curl -s ${SERVICE_URL}/weather/krakow | grep "°C"
+
+# Test URL normalization
+curl -I ${SERVICE_URL}/weather/New%20York
+# Should return 307 redirect to /weather/new-york
+```
+
+## What I Learned
+
+### SSG vs ISR vs SSR
+
+| | SSG | ISR | SSR |
+|---|-----|-----|-----|
+| **Render time** | Build time | Build + runtime | Runtime only |
+| **Data freshness** | Stale (from build) | Fresh (revalidate) | Always fresh |
+| **Performance** | Instant | Instant (stale) | Slow (fetch) |
+| **Use case** | Static content | Semi-static content | Real-time data |
+| **Next.js config** | `generateStaticParams` | `+ revalidate: N` | `cache: 'no-store'` |
+
+### generateStaticParams
+
+```typescript
+export async function generateStaticParams() {
+  return [
+    { city: 'warsaw' },
+    { city: 'london' },
+  ];
+}
+```
+
+**What it does:**
+- Pre-renders these routes at build time
+- Creates static HTML files
+- Instant page load (no API call)
+- SEO-friendly (crawlers see full HTML)
+
+**When to use:**
+- Popular pages (top 20% traffic = 80% coverage)
+- Known routes (blog posts, product pages)
+- Static content (docs, marketing)
+
+**When NOT to use:**
+- User-generated routes (infinite possibilities)
+- Personalized pages (different for each user)
+- Real-time data (stock prices, live scores)
+
+### Next.js fetch() Extensions
+
+**Standard Web API:**
+```typescript
+fetch(url, {
+  cache: 'default' | 'no-store' | 'reload' | 'no-cache' | 'force-cache',
+})
+```
+
+**Next.js extensions:**
+```typescript
+fetch(url, {
+  next: {
+    revalidate: 3600,        // ISR: cache for 1h
+    tags: ['weather'],       // On-demand revalidation
+  }
+})
+```
+
+⚠️ **Only works in Server Components/Actions!** (Client Components use standard fetch)
+
+### Cloud Run + Ephemeral Filesystem
+
+**The problem:**
+- Cloud Run containers have temporary filesystem
+- `.next/cache/` is not persistent
+- Scale-to-zero = cache lost
+- Multi-instance = cache not shared
+
+**What persists:**
+- Docker image files (pre-rendered HTML ✅)
+- Environment variables ✅
+- Code ✅
+
+**What doesn't persist:**
+- `.next/cache/` (ISR cache ❌)
+- In-memory state (recentCities Map ❌)
+- Uploaded files ❌
+
+**Solutions:**
+1. **Use what persists:** `generateStaticParams` works (in Docker image)
+2. **External cache:** Redis/Memorystore for distributed cache
+3. **Accept limitations:** Pre-render popular pages, SSR for rest
+4. **min-instances=1:** Keep container warm (costs money)
+
+### Kebab-case URL Slugs
+
+**Why:**
+- SEO: `/weather/new-york` is more readable than `/weather/newyork`
+- Accessibility: Screen readers pronounce "new-york" correctly
+- Standards: Google recommends hyphens over underscores/spaces
+
+**Implementation:**
+```typescript
+// User input: "New York"
+cityToSlug("New York")  // → "new-york" (URL)
+slugToCity("new-york")  // → "new york" (API)
+capitalizeCity("new york")  // → "New York" (display)
 ```
 
 ## Development Progress
 
 ### Phase 1: Project Setup ✅
-- Forked from POC #3 (nextjs-dynamic-routes)
+- Forked from POC #4 (nextjs-server-actions)
 - Removed `.git`, `.next`, `node_modules`
-- Updated `package.json` name to `nextjs-server-actions`
+- Updated `package.json` name to `nextjs-isr-ssg`
 - Initialized fresh git repo with personal GitHub config
 - Created initial commit
 
-### Phase 2: Server Actions ✅
-- Created `app/actions.ts` with Server Actions
-- `saveRecentCity()` - form submission + redirect
-- `getRecentCities()` - fetch recent cities
-- `saveRecentCityWithoutRedirect()` - for click handlers
-- Implemented `revalidatePath()` for cache invalidation
+### Phase 2: Popular Cities Config ✅
+- Created `app/_config/cities.ts`
+- Defined `POPULAR_CITIES` array (kebab-case slugs)
+- Added helper functions: `slugToCity`, `cityToSlug`, `capitalizeCity`
 
-### Phase 3: Client Component with useActionState ✅
-- Updated `CitySelector.tsx` to use `useActionState`
-- Created `SubmitButton` component with `useFormStatus`
-- Removed `useState`, `useEffect`, `fetch()` patterns
-- Progressive enhancement: works without JavaScript
+### Phase 3: Static Site Generation ✅
+- Added `generateStaticParams()` in `app/weather/[city]/page.tsx`
+- Maps `POPULAR_CITIES` to pre-rendered routes
+- Build output shows `● (SSG)` for popular cities
 
-### Phase 4: Server Component with Inline Actions ✅
-- Converted `RecentSearches.tsx` to Server Component
-- Added inline Server Action for city clicks
-- Each city button is a form (progressive enhancement)
-- Removed client-side state management
+### Phase 4: ISR Revalidation ✅
+- Changed `weatherService.ts` from `cache: 'no-store'` to `next: { revalidate: 3600 }`
+- Added console logs to track API calls
+- Popular cities: no logs (pre-rendered)
+- Other cities: logs show API fetch (SSR on-demand)
 
-### Phase 5: Cleanup ✅
-- Removed `app/api/cities/recent/route.ts` (API Route)
-- Removed entire `app/api/` directory
-- Updated README.md for POC #4
-- All code tested locally
+### Phase 5: URL Normalization ✅
+- Added slug normalization in `page.tsx`
+- Redirect `/weather/New York` → `/weather/new-york`
+- Updated Server Actions to use `cityToSlug()`
+- Proper capitalization in display (`capitalizeCity`)
+
+### Phase 6: Documentation ✅
+- Updated README for POC #5
+- Explained SSG vs ISR vs SSR
+- Documented Cloud Run limitations
+- Added slug helpers documentation
 
 ## Commits
 
 Clean git history:
-1. `Initial commit - forked from POC #3 (nextjs-dynamic-routes)`
-2. `Add Server Actions with React 19 form hooks`
+1. `Initial commit - forked from POC #4 (nextjs-server-actions)`
+2. `Add ISR/SSG with generateStaticParams and revalidate`
 
 Each commit represents a complete working state.
 
-**GitHub:** https://github.com/pawel-janus/nextjs-server-actions
-
-## Key Learnings
-
-### When to Use Server Actions
-
-✅ **Use Server Actions for:**
-- Form submissions
-- Data mutations (create, update, delete)
-- Actions triggered by user interaction
-- When you want progressive enhancement
-
-❌ **Don't use Server Actions for:**
-- Third-party webhooks (use API Routes)
-- Public REST API (use API Routes)
-- Real-time data fetching (use React Query/SWR)
-
-### Server Action Patterns
-
-**Pattern 1: Separate file with 'use server'**
-```tsx
-// app/actions.ts
-'use server';
-
-export async function myAction() {
-  // All exports are Server Actions
-}
-```
-
-**Pattern 2: Inline in Server Component**
-```tsx
-// app/page.tsx (Server Component)
-export default function Page() {
-  async function handleSubmit(formData: FormData) {
-    'use server';
-    // Inline Server Action
-  }
-  
-  return <form action={handleSubmit}>...</form>;
-}
-```
-
-**Pattern 3: Called from Client Component**
-```tsx
-// app/actions.ts
-'use server';
-export async function myAction() { ... }
-
-// app/component.tsx
-'use client';
-import { myAction } from './actions';
-
-export function Component() {
-  const [state, formAction] = useActionState(myAction, null);
-  return <form action={formAction}>...</form>;
-}
-```
-
-### Progressive Enhancement Checklist
-
-- ✅ Use `<form action={serverAction}>` (not `onSubmit`)
-- ✅ Use native `<button type="submit">` (not `onClick`)
-- ✅ Add `name` attributes to all inputs
-- ✅ Use `required` for required fields (HTML5 validation)
-- ✅ Server Action handles FormData (not JSON)
-- ✅ Test with JavaScript disabled
+**GitHub:** (to be created after deployment)
 
 ## Part of Next.js POC Series
 
-This is POC #4 in a series exploring Next.js App Router patterns:
+This is POC #5 in a series exploring Next.js App Router patterns:
 1. ✅ **Next.js SSR Basics** - Server-Side Rendering fundamentals
 2. ✅ **Interactive Weather Dashboard** - Client Components + API Routes
 3. ✅ **Dynamic Routes Weather Dashboard** - File-based routing patterns
-4. ✅ **Server Actions + Forms** ← You are here
-5. 🔄 **ISR/SSG Strategies** - Static generation + revalidation
+4. ✅ **Server Actions + Forms** - React 19 form hooks, progressive enhancement
+5. ✅ **ISR/SSG + Caching** ← You are here
 6. 🔄 **Route Groups** - Organizing routes without URL changes
 7. 🔄 **Optimizations** - Image, Script, Bundle analysis
 8. 🔄 **Advanced Routing** - Parallel + Intercepting Routes
@@ -672,8 +563,8 @@ This is POC #4 in a series exploring Next.js App Router patterns:
 
 ---
 
-**Learning focus:** Server Actions, React 19 form hooks, progressive enhancement, type-safe mutations  
+**Learning focus:** ISR, SSG, generateStaticParams, cache strategies, Cloud Run limitations  
 **Status:** ✅ Complete  
-**Production:** Deployed to Cloud Run (see deployment instructions above for URL)  
-**Repository:** https://github.com/pawel-janus/nextjs-server-actions  
-**Next POC:** #5 - ISR/SSG Strategies
+**Production:** (to be deployed)  
+**Repository:** (to be created)  
+**Next POC:** #6 - Route Groups
