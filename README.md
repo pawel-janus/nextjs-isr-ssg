@@ -565,6 +565,6 @@ This is POC #5 in a series exploring Next.js App Router patterns:
 
 **Learning focus:** ISR, SSG, generateStaticParams, cache strategies, Cloud Run limitations  
 **Status:** ✅ Complete  
-**Production:** (to be deployed)  
-**Repository:** (to be created)  
+**Production:** Deployed to Cloud Run (see deployment instructions above for URL)  
+**Repository:** https://github.com/pawel-janus/nextjs-isr-ssg  
 **Next POC:** #6 - Route Groups
