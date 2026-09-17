@@ -344,19 +344,20 @@ docker run -p 3000:3000 nextjs-isr-ssg:latest
 
 ```bash
 # Set variables
-PROJECT_ID=native-dev-506112
-REGION=europe-central2
+PROJECT_ID=YOUR_PROJECT_ID
+REGION=YOUR_REGION  # e.g., europe-central2, us-central1
 SERVICE_NAME=nextjs-isr-ssg
+ACCOUNT=YOUR_EMAIL@gmail.com
 
 # 1. Build Docker image with Cloud Build
 gcloud builds submit \
-  --account=paweljanus.gcp@gmail.com \
+  --account=${ACCOUNT} \
   --project=${PROJECT_ID} \
   --tag ${REGION}-docker.pkg.dev/${PROJECT_ID}/nextjs-apps/${SERVICE_NAME}:latest
 
 # 2. Deploy to Cloud Run
 gcloud run deploy ${SERVICE_NAME} \
-  --account=paweljanus.gcp@gmail.com \
+  --account=${ACCOUNT} \
   --project=${PROJECT_ID} \
   --image=${REGION}-docker.pkg.dev/${PROJECT_ID}/nextjs-apps/${SERVICE_NAME}:latest \
   --platform=managed \
@@ -374,7 +375,7 @@ gcloud run deploy ${SERVICE_NAME} \
 
 ```bash
 gcloud run services describe ${SERVICE_NAME} \
-  --account=paweljanus.gcp@gmail.com \
+  --account=${ACCOUNT} \
   --project=${PROJECT_ID} \
   --region=${REGION} \
   --format='value(status.url)'
@@ -385,7 +386,7 @@ gcloud run services describe ${SERVICE_NAME} \
 ```bash
 # Get the service URL
 SERVICE_URL=$(gcloud run services describe ${SERVICE_NAME} \
-  --account=paweljanus.gcp@gmail.com \
+  --account=${ACCOUNT} \
   --project=${PROJECT_ID} \
   --region=${REGION} \
   --format='value(status.url)')
